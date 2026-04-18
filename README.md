@@ -2,70 +2,38 @@
 
 Lightweight CLI to validate and monitor ETL pipeline health with configurable alerting.
 
----
+## Checks
+
+| Check | Description |
+|---|---|
+| `RowCountCheck` | Validates row count is within expected range |
+| `NullCheck` | Detects null values in specified columns |
+| `UniquenessCheck` | Ensures column values meet uniqueness requirements |
+| `FreshnessCheck` | Validates data is not stale based on a timestamp column |
+| `SchemaCheck` | Confirms expected columns are present |
+| `ValueRangeCheck` | Ensures numeric values fall within defined bounds |
+| `CustomSQLCheck` | Runs a custom SQL query and evaluates the result |
+| `RegexCheck` | Validates column values match a regular expression |
+| `CompletenessCheck` | Ensures required columns have no missing or empty values |
+
+## Usage
+
+```python
+from pipewarden.checks import CompletenessCheck
+
+check = CompletenessCheck(
+    name="user_completeness",
+    columns=["name", "email", "phone"],
+    allowed_missing_rate=0.05,
+    warning_missing_rate=0.01,
+)
+
+result = check.run(rows)
+print(result.status, result.message)
+```
 
 ## Installation
 
 ```bash
 pip install pipewarden
 ```
-
-Or install from source:
-
-```bash
-git clone https://github.com/youruser/pipewarden.git && cd pipewarden && pip install .
-```
-
----
-
-## Usage
-
-Define your pipeline checks in a YAML config file:
-
-```yaml
-# pipewarden.yml
-pipelines:
-  - name: daily_sales_etl
-    checks:
-      - type: row_count
-        min: 1000
-      - type: null_check
-        columns: [order_id, customer_id]
-    alerts:
-      email: ops-team@example.com
-```
-
-Then run the warden:
-
-```bash
-pipewarden run --config pipewarden.yml
-```
-
-Check a specific pipeline:
-
-```bash
-pipewarden check --pipeline daily_sales_etl --verbose
-```
-
-View pipeline status history:
-
-```bash
-pipewarden status --last 7d
-```
-
----
-
-## Commands
-
-| Command | Description |
-|---|---|
-| `run` | Execute all configured pipeline checks |
-| `check` | Validate a single pipeline |
-| `status` | View historical health reports |
-| `init` | Generate a starter config file |
-
----
-
-## License
-
-MIT © 2024 pipewarden contributors

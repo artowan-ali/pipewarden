@@ -3,6 +3,10 @@ from pipewarden.checks.null_check import NullCheck
 from pipewarden.checks.uniqueness_check import UniquenessCheck
 from pipewarden.checks.freshness_check import FreshnessCheck
 from pipewarden.checks.schema_check import SchemaCheck
+from pipewarden.checks.value_range_check import ValueRangeCheck
+from pipewarden.checks.custom_sql_check import CustomSQLCheck
+from pipewarden.checks.regex_check import RegexCheck
+from pipewarden.checks.completeness_check import CompletenessCheck
 
 __all__ = [
     "RowCountCheck",
@@ -10,4 +14,8 @@ __all__ = [
     "UniquenessCheck",
     "FreshnessCheck",
     "SchemaCheck",
+    "ValueRangeCheck",
+    "CustomSQLCheck",
+    "RegexCheck",
+    "CompletenessCheck",
 ]
