@@ -7,6 +7,7 @@ from pipewarden.checks.value_range_check import ValueRangeCheck
 from pipewarden.checks.custom_sql_check import CustomSQLCheck
 from pipewarden.checks.regex_check import RegexCheck
 from pipewarden.checks.completeness_check import CompletenessCheck
+from pipewarden.checks.distribution_check import DistributionCheck
 
 __all__ = [
     "RowCountCheck",
@@ -18,4 +19,5 @@ __all__ = [
     "CustomSQLCheck",
     "RegexCheck",
     "CompletenessCheck",
+    "DistributionCheck",
 ]

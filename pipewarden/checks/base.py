@@ -1,25 +1,20 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 class CheckStatus(str, Enum):
     PASSED = "passed"
     FAILED = "failed"
     WARNING = "warning"
-    SKIPPED = "skipped"
 
 
 @dataclass
 class CheckResult:
-    check_name: str
+    name: str
     status: CheckStatus
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=datetime.utcnow)
-    duration_ms: Optional[float] = None
+    details: dict[str, Any] = field(default_factory=dict)
 
     def passed(self) -> bool:
         return self.status == CheckStatus.PASSED
@@ -27,38 +22,44 @@ class CheckResult:
     def failed(self) -> bool:
         return self.status == CheckStatus.FAILED
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
-            "check_name": self.check_name,
+            "name": self.name,
             "status": self.status.value,
             "message": self.message,
             "details": self.details,
-            "timestamp": self.timestamp.isoformat(),
-            "duration_ms": self.duration_ms,
         }
 
 
-class BaseCheck(ABC):
-    """Abstract base class for all pipeline health checks."""
+class BaseCheck:
+    name: str = "base_check"
 
-    def __init__(self, name: str, config: Optional[Dict[str, Any]] = None):
-        self.name = name
-        self.config = config or {}
+    def run(self, rows: list[dict[str, Any]]) -> CheckResult:
+        raise NotImplementedError
 
-    @abstractmethod
-    def run(self) -> CheckResult:
-        """Execute the check and return a result."""
-        ...
 
-    def _make_result(
-        self,
-        status: CheckStatus,
-        message: str,
-        details: Optional[Dict[str, Any]] = None,
-    ) -> CheckResult:
-        return CheckResult(
-            check_name=self.name,
-            status=status,
-            message=message,
-            details=details or {},
-        )
+def passed(name: str, details: Optional[dict] = None) -> CheckResult:
+    return CheckResult(
+        name=name,
+        status=CheckStatus.PASSED,
+        message="Check passed",
+        details=details or {},
+    )
+
+
+def failed(name: str, message: str, details: Optional[dict] = None) -> CheckResult:
+    return CheckResult(
+        name=name,
+        status=CheckStatus.FAILED,
+        message=message,
+        details=details or {},
+    )
+
+
+def warned(name: str, message: str, details: Optional[dict] = None) -> CheckResult:
+    return CheckResult(
+        name=name,
+        status=CheckStatus.WARNING,
+        message=message,
+        details=details or {},
+    )
