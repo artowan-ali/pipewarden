@@ -22,6 +22,9 @@ class CheckResult:
     def failed(self) -> bool:
         return self.status == CheckStatus.FAILED
 
+    def warned(self) -> bool:
+        return self.status == CheckStatus.WARNING
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
