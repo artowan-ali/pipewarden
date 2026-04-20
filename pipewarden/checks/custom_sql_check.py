@@ -8,6 +8,20 @@ class CustomSQLCheck(BaseCheck):
     against configurable thresholds.
 
     The query must return a single scalar value (e.g. SELECT COUNT(*) ...).
+
+    Args:
+        name: Human-readable name for this check.
+        query: SQL query to execute. Must return a single scalar value.
+        execute_fn: Callable that accepts a SQL string and returns the scalar result.
+        expected_value: If set, the result must equal this value exactly.
+        min_value: If set, the numeric result must be >= this value (hard failure).
+        max_value: If set, the numeric result must be <= this value (hard failure).
+        warning_min: If set, the numeric result below this value triggers a warning.
+        warning_max: If set, the numeric result above this value triggers a warning.
+
+    Note:
+        ``min_value``/``max_value`` are evaluated before ``warning_min``/``warning_max``.
+        ``expected_value`` takes precedence over all numeric threshold checks.
     """
 
     def __init__(
