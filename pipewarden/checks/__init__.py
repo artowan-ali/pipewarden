@@ -1,6 +1,9 @@
+"""pipewarden built-in checks."""
+
 from pipewarden.checks.base import (
     CheckStatus,
     CheckResult,
+    BaseCheck,
     passed,
     failed,
     warned,
@@ -18,10 +21,12 @@ from pipewarden.checks.distribution_check import DistributionCheck
 from pipewarden.checks.duplicate_row_check import DuplicateRowCheck
 from pipewarden.checks.referential_integrity_check import ReferentialIntegrityCheck
 from pipewarden.checks.cross_field_check import CrossFieldCheck
+from pipewarden.checks.trend_check import TrendCheck
 
 __all__ = [
     "CheckStatus",
     "CheckResult",
+    "BaseCheck",
     "passed",
     "failed",
     "warned",
@@ -38,4 +43,5 @@ __all__ = [
     "DuplicateRowCheck",
     "ReferentialIntegrityCheck",
     "CrossFieldCheck",
+    "TrendCheck",
 ]
