@@ -56,3 +56,13 @@ def test_context_fields(default_check):
     result = default_check.run(rows)
     assert result.context["unique_count"] == 20
     assert result.context["duplicate_count"] == 0
+
+
+def test_context_fields_with_duplicates():
+    """Verify context reports correct counts when duplicates are present."""
+    check = UniquenessCheck(name="ctx_dupes", column="id", max_duplicate_rate=0.1)
+    rows = make_rows(100, 10)
+    result = check.run(rows)
+    assert result.context["duplicate_count"] == 10
+    assert result.context["unique_count"] == 90
+    assert result.context["duplicate_rate"] == pytest.approx(0.1)
