@@ -36,3 +36,16 @@ check = DistributionCheck(
 result = check.run(rows)
 print(result.to_dict())
 ```
+
+## Check Results
+
+Every check returns a `CheckResult` object with the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `passed` | `bool` | Whether the check passed |
+| `check_name` | `str` | Name of the check that was run |
+| `message` | `str` | Human-readable summary of the result |
+| `details` | `dict` | Additional context or failure metadata |
+
+Use `.to_dict()` to serialize the result for logging or alerting integrations.
