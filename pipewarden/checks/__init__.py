@@ -1,3 +1,10 @@
+from pipewarden.checks.base import (
+    CheckStatus,
+    CheckResult,
+    passed,
+    failed,
+    warned,
+)
 from pipewarden.checks.row_count import RowCountCheck
 from pipewarden.checks.null_check import NullCheck
 from pipewarden.checks.uniqueness_check import UniquenessCheck
@@ -9,8 +16,15 @@ from pipewarden.checks.regex_check import RegexCheck
 from pipewarden.checks.completeness_check import CompletenessCheck
 from pipewarden.checks.distribution_check import DistributionCheck
 from pipewarden.checks.duplicate_row_check import DuplicateRowCheck
+from pipewarden.checks.referential_integrity_check import ReferentialIntegrityCheck
+from pipewarden.checks.cross_field_check import CrossFieldCheck
 
 __all__ = [
+    "CheckStatus",
+    "CheckResult",
+    "passed",
+    "failed",
+    "warned",
     "RowCountCheck",
     "NullCheck",
     "UniquenessCheck",
@@ -22,4 +36,6 @@ __all__ = [
     "CompletenessCheck",
     "DistributionCheck",
     "DuplicateRowCheck",
+    "ReferentialIntegrityCheck",
+    "CrossFieldCheck",
 ]
