@@ -1,4 +1,32 @@
-"""Public API for pipewarden checks."""
+"""Public API for pipewarden checks.
+
+This module exposes all built-in check classes and result utilities for
+convenient top-level imports::
+
+    from pipewarden.checks import NullCheck, RowCountCheck, passed, failed
+
+Check classes
+-------------
+- CompletenessCheck   – fraction of non-null values meets a threshold
+- CrossFieldCheck     – validates relationships between two columns
+- CustomSQLCheck      – arbitrary SQL expression evaluated as a boolean
+- DistributionCheck   – compares value distributions against a baseline
+- DuplicateRowCheck   – detects duplicate rows across specified columns
+- FreshnessCheck      – asserts data was updated within a time window
+- NullCheck           – ensures a column contains no (or limited) nulls
+- ReferentialIntegrityCheck – foreign-key style integrity between tables
+- RegexCheck          – validates column values against a regex pattern
+- RowCountCheck       – asserts row count falls within expected bounds
+- SchemaCheck         – validates column names and/or data types
+- StatisticalOutlierCheck – flags rows whose values are statistical outliers
+- TrendCheck          – detects unexpected changes in a metric over time
+- UniquenessCheck     – asserts that column values are unique
+- ValueRangeCheck     – asserts column values fall within a numeric range
+
+Result helpers
+--------------
+- passed / warned / failed  – convenience constructors for CheckResult
+"""
 
 from pipewarden.checks.base import CheckResult, CheckStatus, failed, passed, warned
 from pipewarden.checks.completeness_check import CompletenessCheck
