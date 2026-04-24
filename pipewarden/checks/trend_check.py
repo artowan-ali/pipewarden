@@ -10,6 +10,17 @@ class TrendCheck(BaseCheck):
     Compares the current value (derived from rows) against a provided baseline
     value and raises warnings or failures when the relative change exceeds the
     configured thresholds.
+
+    Attributes:
+        name: Identifier for this check instance.
+        column: Name of the column to aggregate and compare.
+        baseline: The historical reference value to compare against.
+        warning_threshold: Maximum relative change before a WARN result
+            (e.g. 0.10 = 10%). Must be less than failure_threshold.
+        failure_threshold: Maximum relative change before a FAIL result
+            (e.g. 0.25 = 25%).
+        aggregator: Callable that reduces a list of numeric values to a single
+            float. Defaults to the arithmetic mean.
     """
 
     name: str = "trend_check"
@@ -23,6 +34,16 @@ class TrendCheck(BaseCheck):
     aggregator: Callable[[list[Any]], float] = field(
         default=lambda values: sum(values) / len(values) if values else 0.0
     )
+
+    def __post_init__(self) -> None:
+        """Validate threshold configuration after initialisation."""
+        if self.warning_threshold >= self.failure_threshold:
+            raise ValueError(
+                f"warning_threshold ({self.warning_threshold}) must be strictly less than "
+                f"failure_threshold ({self.failure_threshold})"
+            )
+        if self.warning_threshold < 0 or self.failure_threshold < 0:
+            raise ValueError("Thresholds must be non-negative values")
 
     def run(self, rows: list[dict]) -> CheckResult:
         if not rows:
