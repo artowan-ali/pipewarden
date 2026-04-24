@@ -91,3 +91,16 @@ def test_iqr_method_fails_with_outliers():
     rows = [{"score": v} for v in [10, 12, 11, 13, 10, 500]]
     result = check.run(rows)
     assert result.status == CheckStatus.FAILED
+
+
+def test_invalid_method_raises():
+    """Unsupported method values should raise an error at construction or run time."""
+    check = StatisticalOutlierCheck(
+        column="value",
+        method="unsupported_method",
+        threshold=3.0,
+        allowed_outlier_rate=0.0,
+    )
+    rows = make_rows([10, 11, 10, 12, 11])
+    with pytest.raises((ValueError, KeyError, NotImplementedError)):
+        check.run(rows)
