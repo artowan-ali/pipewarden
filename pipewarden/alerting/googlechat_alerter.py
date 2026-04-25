@@ -48,5 +48,15 @@ class GoogleChatAlerter(BaseAlerter):
             return
         payload = self._build_payload(context)
         session = self._session_or_default()
-        response = session.post(self.webhook_url, json=payload, timeout=self.timeout)
-        response.raise_for_status()
+        try:
+            response = session.post(self.webhook_url, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+        except requests.exceptions.Timeout as exc:
+            raise RuntimeError(
+                f"GoogleChatAlerter timed out after {self.timeout}s "
+                f"posting to webhook."
+            ) from exc
+        except requests.exceptions.RequestException as exc:
+            raise RuntimeError(
+                f"GoogleChatAlerter failed to deliver alert: {exc}"
+            ) from exc
