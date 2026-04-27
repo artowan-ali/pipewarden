@@ -1,91 +1,79 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
-import urllib.request
-import urllib.error
-import json
-import logging
+from typing import Optional
+
+import requests
 
 from pipewarden.alerting.base import BaseAlerter, AlertContext
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
 class OpsGenieAlerter(BaseAlerter):
-    """Send alerts to OpsGenie when pipeline checks fail."""
+    """Send pipeline health alerts to OpsGenie."""
 
     api_key: str = ""
-    priority: str = "P3"  # P1–P5
+    region: str = "us"  # "us" or "eu"
+    priority: str = "P3"
     tags: list[str] = field(default_factory=list)
+    responders: list[dict] = field(default_factory=list)
     alias_prefix: str = "pipewarden"
-    api_url: str = "https://api.opsgenie.com/v2/alerts"
+    _session: Optional[requests.Session] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not self.api_key:
-            raise ValueError("OpsGenieAlerter requires 'api_key' to be set.")
-        valid_priorities = {"P1", "P2", "P3", "P4", "P5"}
-        if self.priority not in valid_priorities:
-            raise ValueError(
-                f"Invalid priority '{self.priority}'. Must be one of {valid_priorities}."
-            )
+            raise ValueError("OpsGenieAlerter requires 'api_key'")
+        if self.region not in ("us", "eu"):
+            raise ValueError("OpsGenieAlerter 'region' must be 'us' or 'eu'")
 
-    def _build_payload(self, context: AlertContext) -> dict[str, Any]:
+    def _session_or_default(self) -> requests.Session:
+        if self._session is not None:
+            return self._session
+        session = requests.Session()
+        session.headers.update(
+            {
+                "Authorization": f"GenieKey {self.api_key}",
+                "Content-Type": "application/json",
+            }
+        )
+        return session
+
+    @property
+    def _base_url(self) -> str:
+        subdomain = "api.eu" if self.region == "eu" else "api"
+        return f"https://{subdomain}.opsgenie.com/v2/alerts"
+
+    def _build_payload(self, context: AlertContext) -> dict:
+        status = "HEALTHY" if context.is_healthy else "UNHEALTHY"
         failed_names = [r.check_name for r in context.failures]
         warned_names = [r.check_name for r in context.warnings]
 
-        lines = [f"Pipeline: {context.pipeline_name}"]
+        lines = [f"Pipeline: {context.pipeline_name}  |  Status: {status}"]
         if failed_names:
             lines.append(f"Failed checks: {', '.join(failed_names)}")
         if warned_names:
-            lines.append(f"Warning checks: {', '.join(warned_names)}")
+            lines.append(f"Warned checks: {', '.join(warned_names)}")
 
-        description = "\n".join(lines)
-        alias = f"{self.alias_prefix}-{context.pipeline_name}".replace(" ", "-").lower()
-
-        return {
-            "message": f"[PipeWarden] Pipeline '{context.pipeline_name}' has issues",
-            "alias": alias,
-            "description": description,
+        payload: dict = {
+            "message": f"[pipewarden] {context.pipeline_name} — {status}",
+            "alias": f"{self.alias_prefix}-{context.pipeline_name}",
+            "description": "\n".join(lines),
             "priority": self.priority,
-            "tags": self.tags,
             "details": {
-                "failed_count": str(len(context.failures)),
-                "warning_count": str(len(context.warnings)),
+                "pipeline": context.pipeline_name,
+                "status": status,
+                "failed_checks": str(len(context.failures)),
+                "warned_checks": str(len(context.warnings)),
             },
         }
+        if self.tags:
+            payload["tags"] = self.tags
+        if self.responders:
+            payload["responders"] = self.responders
+        return payload
 
     def send(self, context: AlertContext) -> None:
-        if context.is_healthy:
-            logger.debug(
-                "OpsGenieAlerter: pipeline '%s' is healthy, skipping alert.",
-                context.pipeline_name,
-            )
-            return
-
         payload = self._build_payload(context)
-        body = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            self.api_url,
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"GenieKey {self.api_key}",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req) as resp:
-                logger.info(
-                    "OpsGenieAlerter: alert sent for pipeline '%s' (HTTP %s).",
-                    context.pipeline_name,
-                    resp.status,
-                )
-        except urllib.error.HTTPError as exc:
-            logger.error(
-                "OpsGenieAlerter: failed to send alert (HTTP %s): %s",
-                exc.code,
-                exc.reason,
-            )
-            raise
+        session = self._session_or_default()
+        response = session.post(self._base_url, json=payload, timeout=10)
+        response.raise_for_status()
