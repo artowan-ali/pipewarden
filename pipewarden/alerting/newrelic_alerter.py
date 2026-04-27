@@ -67,5 +67,17 @@ class NewRelicAlerter(BaseAlerter):
             "Content-Type": "application/json",
         }
         payload = self._build_payload(ctx)
-        response = session.post(self._endpoint(), json=payload, headers=headers)
-        response.raise_for_status()
+        try:
+            response = session.post(self._endpoint(), json=payload, headers=headers)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "unknown"
+            raise RuntimeError(
+                f"NewRelicAlerter: HTTP {status} error posting event for pipeline "
+                f"'{ctx.pipeline_name}' to New Relic"
+            ) from exc
+        except requests.exceptions.RequestException as exc:
+            raise RuntimeError(
+                f"NewRelicAlerter: failed to reach New Relic endpoint for pipeline "
+                f"'{ctx.pipeline_name}': {exc}"
+            ) from exc
