@@ -77,3 +77,21 @@ def test_custom_aggregator_uses_max():
     rows = make_rows([80, 90, 130])  # max=130 → 30 % → fail
     result = check.run(rows)
     assert result.status == CheckStatus.FAILED
+
+
+def test_negative_deviation_warns(default_check):
+    """A drop below baseline should also trigger warning/failure thresholds."""
+    # avg = 85 → 15 % below baseline; > 10 % warning, < 25 % failure
+    rows = make_rows([83, 85, 87])
+    result = default_check.run(rows)
+    assert result.status == CheckStatus.WARNED
+    assert "warning threshold" in result.message
+
+
+def test_negative_deviation_fails(default_check):
+    """A large drop below baseline should trigger the failure threshold."""
+    # avg = 60 → 40 % below baseline; > 25 % failure
+    rows = make_rows([58, 60, 62])
+    result = default_check.run(rows)
+    assert result.status == CheckStatus.FAILED
+    assert "failure threshold" in result.message
