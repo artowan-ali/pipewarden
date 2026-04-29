@@ -64,9 +64,20 @@ class StatisticalOutlierCheck(BaseCheck):
     def _iqr_outliers(self, values: list[float]) -> list[int]:
         sorted_vals = sorted(values)
         n = len(sorted_vals)
-        q1 = sorted_vals[n // 4]
-        q3 = sorted_vals[(3 * n) // 4]
+        q1 = self._percentile(sorted_vals, 25)
+        q3 = self._percentile(sorted_vals, 75)
         iqr = q3 - q1
         lower = q1 - self.threshold * iqr
         upper = q3 + self.threshold * iqr
         return [i for i, v in enumerate(values) if v < lower or v > upper]
+
+    def _percentile(self, sorted_vals: list[float], pct: float) -> float:
+        """Return the value at the given percentile using linear interpolation."""
+        n = len(sorted_vals)
+        if n == 1:
+            return sorted_vals[0]
+        idx = (pct / 100) * (n - 1)
+        lower_idx = int(idx)
+        upper_idx = min(lower_idx + 1, n - 1)
+        fraction = idx - lower_idx
+        return sorted_vals[lower_idx] + fraction * (sorted_vals[upper_idx] - sorted_vals[lower_idx])
