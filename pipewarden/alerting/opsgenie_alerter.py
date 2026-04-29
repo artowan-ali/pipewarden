@@ -5,36 +5,35 @@ from typing import Optional
 
 import requests
 
-from pipewarden.alerting.base import BaseAlerter, AlertContext
+from pipewarden.alerting.base import AlertContext, BaseAlerter
 
 
 @dataclass
 class OpsGenieAlerter(BaseAlerter):
-    """Send alerts to OpsGenie via the Alert API."""
+    """Send alerts to OpsGenie via the Alerts API."""
 
     api_key: str = ""
     region: str = "us"  # "us" or "eu"
-    priority: str = "P3"
     tags: list[str] = field(default_factory=list)
+    priority: str = "P3"  # P1–P5
     responders: list[dict] = field(default_factory=list)
-    session: Optional[requests.Session] = field(default=None, repr=False)
+    _session: Optional[requests.Session] = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if not self.api_key:
             raise ValueError("OpsGenieAlerter requires 'api_key'")
-        if self.region not in ("us", "eu"):
-            raise ValueError("OpsGenieAlerter 'region' must be 'us' or 'eu'")
+        valid_priorities = {"P1", "P2", "P3", "P4", "P5"}
+        if self.priority not in valid_priorities:
+            raise ValueError(
+                f"Invalid priority '{self.priority}'. Must be one of {valid_priorities}"
+            )
 
     def _session_or_default(self) -> requests.Session:
-        if self.session is not None:
-            return self.session
+        if self._session is not None:
+            return self._session
         s = requests.Session()
-        s.headers.update(
-            {
-                "Authorization": f"GenieKey {self.api_key}",
-                "Content-Type": "application/json",
-            }
-        )
+        s.headers["Authorization"] = f"GenieKey {self.api_key}"
+        s.headers["Content-Type"] = "application/json"
         return s
 
     def _base_url(self) -> str:
@@ -43,30 +42,28 @@ class OpsGenieAlerter(BaseAlerter):
         return "https://api.opsgenie.com/v2/alerts"
 
     def _build_payload(self, context: AlertContext) -> dict:
-        status = "HEALTHY" if context.is_healthy() else "UNHEALTHY"
-        failed_names = [r.check_name for r in context.failures]
-        warned_names = [r.check_name for r in context.warnings]
+        status_label = "HEALTHY" if context.is_healthy() else "UNHEALTHY"
+        failed_names = [r.check_name for r in context.failed]
+        warned_names = [r.check_name for r in context.warned]
 
-        lines = [f"Pipeline: {context.pipeline_name} — {status}"]
+        lines = [f"Pipeline '{context.pipeline_name}' is {status_label}."]
         if failed_names:
-            lines.append("Failed: " + ", ".join(failed_names))
+            lines.append(f"Failed checks: {', '.join(failed_names)}")
         if warned_names:
-            lines.append("Warnings: " + ", ".join(warned_names))
+            lines.append(f"Warned checks: {', '.join(warned_names)}")
 
         payload: dict = {
-            "message": f"[pipewarden] {context.pipeline_name} is {status}",
+            "message": f"[pipewarden] {context.pipeline_name} — {status_label}",
             "description": "\n".join(lines),
             "priority": self.priority,
-            "source": "pipewarden",
+            "tags": list(self.tags),
             "details": {
                 "pipeline": context.pipeline_name,
-                "status": status,
-                "failed_checks": ", ".join(failed_names) or "none",
-                "warned_checks": ", ".join(warned_names) or "none",
+                "total_checks": str(len(context.results)),
+                "failed": str(len(context.failed)),
+                "warned": str(len(context.warned)),
             },
         }
-        if self.tags:
-            payload["tags"] = self.tags
         if self.responders:
             payload["responders"] = self.responders
         return payload
