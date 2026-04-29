@@ -1,62 +1,57 @@
 # OpsGenie Alerter
 
-The `OpsGenieAlerter` sends alerts to [OpsGenie](https://www.atlassian.com/software/opsgenie) when one or more pipeline checks fail or warn.
+The `OpsGenieAlerter` sends pipeline failure and warning notifications to
+[OpsGenie](https://www.atlassian.com/software/opsgenie) via the **Alert API v2**.
+
+## Installation
+
+No extra dependencies are required beyond `requests`, which pipewarden already
+includes.
 
 ## Configuration
 
-| Parameter      | Type        | Required | Default                                  | Description                                      |
-|----------------|-------------|----------|------------------------------------------|--------------------------------------------------|
-| `api_key`      | `str`       | ✅ Yes   | —                                        | OpsGenie API integration key.                    |
-| `priority`     | `str`       | No       | `"P3"`                                   | Alert priority (`P1`–`P5`).                      |
-| `tags`         | `list[str]` | No       | `[]`                                     | Tags attached to the OpsGenie alert.             |
-| `alias_prefix` | `str`       | No       | `"pipewarden"`                           | Prefix for the deduplication alias.              |
-| `api_url`      | `str`       | No       | `"https://api.opsgenie.com/v2/alerts"`  | Override for self-hosted / EU instances.         |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `api_key` | `str` | ✅ | — | OpsGenie API integration key |
+| `pipeline_name` | `str` | ✅ | — | Human-readable pipeline identifier |
+| `region` | `str` | ❌ | `"us"` | API region: `"us"` or `"eu"` |
+| `priority` | `str` | ❌ | `"P3"` | Alert priority (`P1`–`P5`) |
+| `tags` | `list[str]` | ❌ | `[]` | Tags attached to the alert |
+| `responders` | `list[dict]` | ❌ | `[]` | OpsGenie responder objects |
+| `session` | `requests.Session` | ❌ | `None` | Custom HTTP session (useful for testing) |
 
 ## Usage
 
 ```python
 from pipewarden.alerting.opsgenie_alerter import OpsGenieAlerter
+from pipewarden.runner import run_pipeline
 
 alerter = OpsGenieAlerter(
     api_key="your-opsgenie-api-key",
+    pipeline_name="orders_etl",
     priority="P2",
     tags=["etl", "production"],
+    responders=[{"type": "team", "name": "data-engineering"}],
 )
+
+result = run_pipeline(checks=[...], alerters=[alerter])
 ```
 
-Pass the alerter to the pipeline runner:
+## EU Region
 
-```python
-from pipewarden.runner import run_pipeline
-
-result = run_pipeline(
-    pipeline_name="orders_pipeline",
-    checks=[...],
-    alerters=[alerter],
-)
-```
-
-## Deduplication
-
-Each alert is assigned an **alias** derived from the `alias_prefix` and the pipeline name (e.g. `pipewarden-orders_pipeline`). OpsGenie uses this alias to deduplicate repeated alerts for the same pipeline.
-
-## Priority levels
-
-| Level | Meaning        |
-|-------|----------------|
-| P1    | Critical        |
-| P2    | High            |
-| P3    | Moderate (default) |
-| P4    | Low             |
-| P5    | Informational   |
-
-## EU / Self-hosted instances
-
-If you use the OpsGenie EU region or a self-hosted instance, override `api_url`:
+If your OpsGenie account is hosted in the EU data centre, set `region="eu"`:
 
 ```python
 alerter = OpsGenieAlerter(
     api_key="your-key",
-    api_url="https://api.eu.opsgenie.com/v2/alerts",
+    pipeline_name="orders_etl",
+    region="eu",
 )
 ```
+
+## Behaviour
+
+- Alerts are **only sent** when the pipeline has at least one `FAILED` or
+  `WARNING` result. Healthy runs are silently skipped.
+- The alert message includes the pipeline name and overall status.
+- The description lists all failed and warned check names for quick triage.
