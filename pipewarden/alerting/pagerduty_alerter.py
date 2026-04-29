@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Optional
@@ -64,5 +65,15 @@ class PagerDutyAlerter(BaseAlerter):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req) as resp:  # noqa: S310
-            resp.read()
+        try:
+            with urllib.request.urlopen(req) as resp:  # noqa: S310
+                resp.read()
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode(errors="replace")
+            raise RuntimeError(
+                f"PagerDuty API request failed with status {exc.code}: {error_body}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"PagerDuty API request failed: {exc.reason}"
+            ) from exc
