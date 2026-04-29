@@ -1,5 +1,3 @@
-"""New Relic alerter — sends pipeline health events to New Relic Events API."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,20 +13,12 @@ _EU_ENDPOINT = "https://insights-collector.eu01.nr-data.net/v1/accounts/{account
 
 @dataclass
 class NewRelicAlerter(BaseAlerter):
-    """Post a custom event to New Relic Insights when a pipeline run completes.
-
-    Args:
-        api_key: New Relic Insights insert key (required).
-        account_id: New Relic account ID (required).
-        event_type: Custom event type name recorded in NRDB.
-        eu_region: When True, use the EU data centre endpoint.
-        session: Optional pre-configured ``requests.Session`` for testing.
-    """
+    """Send pipeline run events to New Relic Insights."""
 
     api_key: str = ""
     account_id: str = ""
-    event_type: str = "PipeWardenRun"
     eu_region: bool = False
+    event_type: str = "PipeWardenCheck"
     session: Optional[requests.Session] = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -44,40 +34,27 @@ class NewRelicAlerter(BaseAlerter):
         template = _EU_ENDPOINT if self.eu_region else _US_ENDPOINT
         return template.format(account_id=self.account_id)
 
-    def _build_payload(self, ctx: AlertContext) -> list[dict]:
-        failed = [r.check_name for r in ctx.failures]
-        warned = [r.check_name for r in ctx.warnings]
-        return [
-            {
+    def _build_payload(self, context: AlertContext) -> list[dict]:
+        events = []
+        for result in context.results:
+            events.append({
                 "eventType": self.event_type,
-                "pipeline": ctx.pipeline_name,
-                "healthy": ctx.is_healthy(),
-                "total_checks": len(ctx.results),
-                "failed_checks": len(failed),
-                "warned_checks": len(warned),
-                "failed_check_names": ", ".join(failed),
-                "warned_check_names": ", ".join(warned),
-            }
-        ]
+                "pipeline": context.pipeline_name,
+                "checkName": result.check_name,
+                "status": result.status.name,
+                "details": result.details or "",
+                "healthy": context.is_healthy(),
+            })
+        return events
 
-    def send(self, ctx: AlertContext) -> None:
+    def send(self, context: AlertContext) -> None:
         session = self._session_or_default()
         headers = {
-            "X-Insert-Key": self.api_key,
+            "Api-Key": self.api_key,
             "Content-Type": "application/json",
         }
-        payload = self._build_payload(ctx)
-        try:
-            response = session.post(self._endpoint(), json=payload, headers=headers)
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as exc:
-            status = exc.response.status_code if exc.response is not None else "unknown"
-            raise RuntimeError(
-                f"NewRelicAlerter: HTTP {status} error posting event for pipeline "
-                f"'{ctx.pipeline_name}' to New Relic"
-            ) from exc
-        except requests.exceptions.RequestException as exc:
-            raise RuntimeError(
-                f"NewRelicAlerter: failed to reach New Relic endpoint for pipeline "
-                f"'{ctx.pipeline_name}': {exc}"
-            ) from exc
+        payload = self._build_payload(context)
+        response = session.post(
+            self._endpoint(), json=payload, headers=headers, timeout=10
+        )
+        response.raise_for_status()
