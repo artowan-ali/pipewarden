@@ -61,5 +61,15 @@ class RollbarAlerter(BaseAlerter):
 
         payload = self._build_payload(context)
         session = self._session_or_default()
-        response = session.post(self.endpoint, json=payload, timeout=10)
-        response.raise_for_status()
+        try:
+            response = session.post(self.endpoint, json=payload, timeout=10)
+            response.raise_for_status()
+        except requests.exceptions.Timeout as exc:
+            raise RuntimeError(
+                f"Timed out sending alert to Rollbar for pipeline '{context.pipeline_name}'"
+            ) from exc
+        except requests.exceptions.HTTPError as exc:
+            raise RuntimeError(
+                f"Rollbar returned an error for pipeline '{context.pipeline_name}': "
+                f"{exc.response.status_code} {exc.response.text}"
+            ) from exc
