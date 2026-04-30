@@ -54,6 +54,21 @@ result = run_pipeline("orders_etl", checks, alerters=[alerter])
 | `impact` | Configured value (string). |
 | `assignment_group` | Configured value (omitted if not set). |
 
+## Error handling
+
+The alerter raises a `ServiceNowAlertError` if the HTTP request fails (non-2xx
+response) or if the instance is unreachable. Wrap the pipeline call if you want
+to suppress alerting errors without failing the pipeline itself:
+
+```python
+from pipewarden.alerting.servicenow_alerter import ServiceNowAlerter, ServiceNowAlertError
+
+try:
+    result = run_pipeline("orders_etl", checks, alerters=[alerter])
+except ServiceNowAlertError as exc:
+    print(f"Alert delivery failed: {exc}")
+```
+
 ## Security note
 
 Avoid hard-coding credentials.  Use environment variables or a secrets manager
