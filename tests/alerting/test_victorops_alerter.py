@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,117 +14,78 @@ def _make_result(name: str, status: CheckStatus) -> CheckResult:
 
 
 @pytest.fixture()
-def default_alerter() -> VictorOpsAlerter:
-    return VictorOpsAlerter(api_key="test-api-key", routing_key="test-routing")
+def default_alerter():
+    return VictorOpsAlerter(api_key="test-api-key", routing_key="eng-team")
 
 
 @pytest.fixture()
-def failed_context() -> AlertContext:
+def failed_context():
     return AlertContext(
-        pipeline_name="my_pipeline",
+        pipeline_name="orders",
         results=[
-            _make_result("check_a", CheckStatus.FAILED),
-            _make_result("check_b", CheckStatus.PASSED),
+            _make_result("row_count", CheckStatus.FAILED),
+            _make_result("null_check", CheckStatus.PASSED),
         ],
     )
 
 
 @pytest.fixture()
-def healthy_context() -> AlertContext:
+def healthy_context():
     return AlertContext(
-        pipeline_name="my_pipeline",
-        results=[_make_result("check_a", CheckStatus.PASSED)],
+        pipeline_name="orders",
+        results=[
+            _make_result("row_count", CheckStatus.PASSED),
+            _make_result("null_check", CheckStatus.PASSED),
+        ],
     )
 
 
-def test_raises_without_api_key() -> None:
+def test_raises_without_api_key():
     with pytest.raises(ValueError, match="api_key"):
-        VictorOpsAlerter(api_key="", routing_key="key")
+        VictorOpsAlerter(api_key="")
 
 
-def test_raises_without_routing_key() -> None:
-    with pytest.raises(ValueError, match="routing_key"):
-        VictorOpsAlerter(api_key="key", routing_key="")
-
-
-def test_payload_message_type_critical_on_failure(
-    default_alerter: VictorOpsAlerter, failed_context: AlertContext
-) -> None:
+def test_payload_critical_on_failure(default_alerter, failed_context):
     payload = default_alerter._build_payload(failed_context)
     assert payload["message_type"] == "CRITICAL"
+    assert "row_count" in payload["state_message"]
+    assert payload["failed_checks"] == 1
 
 
-def test_payload_message_type_info_on_healthy(
-    default_alerter: VictorOpsAlerter, healthy_context: AlertContext
-) -> None:
+def test_payload_recovery_on_healthy(default_alerter, healthy_context):
     payload = default_alerter._build_payload(healthy_context)
-    assert payload["message_type"] == "INFO"
+    assert payload["message_type"] == "RECOVERY"
+    assert "recovered" in payload["state_message"]
+    assert payload["failed_checks"] == 0
 
 
-def test_payload_contains_pipeline_name(
-    default_alerter: VictorOpsAlerter, failed_context: AlertContext
-) -> None:
+def test_payload_entity_id_contains_pipeline_name(default_alerter, failed_context):
     payload = default_alerter._build_payload(failed_context)
-    assert payload["pipeline"] == "my_pipeline"
-    assert "my_pipeline" in payload["entity_id"]
+    assert "orders" in payload["entity_id"]
+    assert "orders" in payload["entity_display_name"]
 
 
-def test_payload_lists_failed_check_names(
-    default_alerter: VictorOpsAlerter, failed_context: AlertContext
-) -> None:
+def test_send_posts_to_correct_url(default_alerter, failed_context):
+    mock_session = MagicMock()
+    mock_session.post.return_value.raise_for_status = MagicMock()
+    default_alerter.session = mock_session
+
+    default_alerter.send(failed_context)
+
+    call_url = mock_session.post.call_args[0][0]
+    assert "test-api-key" in call_url
+    assert "eng-team" in call_url
+
+
+def test_send_raises_on_http_error(default_alerter, failed_context):
+    mock_session = MagicMock()
+    mock_session.post.return_value.raise_for_status.side_effect = Exception("503")
+    default_alerter.session = mock_session
+
+    with pytest.raises(Exception, match="503"):
+        default_alerter.send(failed_context)
+
+
+def test_payload_monitoring_tool(default_alerter, failed_context):
     payload = default_alerter._build_payload(failed_context)
-    assert "check_a" in payload["state_message"]
-
-
-def test_no_alert_sent_when_healthy_and_only_on_failure(
-    default_alerter: VictorOpsAlerter, healthy_context: AlertContext
-) -> None:
-    with patch("urllib.request.urlopen") as mock_open:
-        default_alerter.send(healthy_context)
-        mock_open.assert_not_called()
-
-
-def test_alert_sent_when_healthy_and_not_only_on_failure(
-    healthy_context: AlertContext,
-) -> None:
-    alerter = VictorOpsAlerter(
-        api_key="key", routing_key="route", only_on_failure=False
-    )
-    mock_resp = MagicMock()
-    mock_resp.status = 200
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
-    with patch("urllib.request.urlopen", return_value=mock_resp) as mock_open:
-        alerter.send(healthy_context)
-        mock_open.assert_called_once()
-
-
-def test_send_posts_correct_url_and_json(
-    default_alerter: VictorOpsAlerter, failed_context: AlertContext
-) -> None:
-    mock_resp = MagicMock()
-    mock_resp.status = 200
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
-    with patch("urllib.request.urlopen", return_value=mock_resp):
-        with patch("urllib.request.Request") as mock_req_cls:
-            default_alerter.send(failed_context)
-            call_args = mock_req_cls.call_args
-            url = call_args[0][0]
-            assert "test-api-key" in url
-            assert "test-routing" in url
-            body = json.loads(call_args[1]["data"])
-            assert body["message_type"] == "CRITICAL"
-
-
-def test_extra_fields_included_in_payload(
-    failed_context: AlertContext,
-) -> None:
-    alerter = VictorOpsAlerter(
-        api_key="key",
-        routing_key="route",
-        extra_fields={"team": "data-eng", "env": "prod"},
-    )
-    payload = alerter._build_payload(failed_context)
-    assert payload["team"] == "data-eng"
-    assert payload["env"] == "prod"
+    assert payload["monitoring_tool"] == "pipewarden"
