@@ -1,6 +1,10 @@
 # OpsGenie Alerter
 
-The `OpsGenieAlerter` sends pipeline health alerts to [OpsGenie](https://www.atlassian.com/software/opsgenie) via the OpsGenie Alerts API.
+The `OpsGenieAlerter` sends pipeline health alerts to [OpsGenie](https://www.atlassian.com/software/opsgenie) using the OpsGenie Alert API v2.
+
+## Requirements
+
+No extra dependencies are required beyond `requests`, which is already a core dependency of pipewarden.
 
 ## Configuration
 
@@ -11,10 +15,9 @@ The `OpsGenieAlerter` sends pipeline health alerts to [OpsGenie](https://www.atl
 | `priority` | `str` | ❌ | `"P3"` | Alert priority (`P1`–`P5`) |
 | `tags` | `list[str]` | ❌ | `[]` | Tags to attach to the alert |
 | `responders` | `list[dict]` | ❌ | `[]` | OpsGenie responder objects |
-| `alert_on_recovery` | `bool` | ❌ | `True` | Send an alert even when pipeline is healthy |
-| `session` | `requests.Session` | ❌ | `None` | Custom HTTP session (useful for testing) |
+| `alert_on_recovery` | `bool` | ❌ | `False` | Send alert even when pipeline is healthy |
 
-## Basic Usage
+## Usage
 
 ```python
 from pipewarden.alerting.opsgenie_alerter import OpsGenieAlerter
@@ -24,6 +27,7 @@ alerter = OpsGenieAlerter(
     api_key="your-opsgenie-api-key",
     priority="P2",
     tags=["etl", "production"],
+    responders=[{"type": "team", "name": "data-engineering"}],
 )
 
 result = run_pipeline("my_pipeline", checks=[...])
@@ -32,43 +36,27 @@ alerter.send(result.to_alert_context())
 
 ## EU Region
 
-If your OpsGenie account is hosted in the EU, set `region="eu"`:
+If your OpsGenie account is on the EU instance, set `region="eu"`:
 
 ```python
 alerter = OpsGenieAlerter(
-    api_key="your-opsgenie-api-key",
+    api_key="your-key",
     region="eu",
 )
 ```
 
-## Responders
+## Alert Payload
 
-You can route alerts to specific teams or users:
+The alerter sends a JSON payload with:
 
-```python
-alerter = OpsGenieAlerter(
-    api_key="your-opsgenie-api-key",
-    responders=[
-        {"type": "team", "name": "data-engineering"},
-        {"type": "user", "username": "oncall@example.com"},
-    ],
-)
-```
-
-## Suppressing Recovery Alerts
-
-By default, an alert is sent whether the pipeline is healthy or not. To only
-alert on failures:
-
-```python
-alerter = OpsGenieAlerter(
-    api_key="your-opsgenie-api-key",
-    alert_on_recovery=False,
-)
-```
+- **message** — short summary including pipeline name and status
+- **description** — multi-line detail listing failed and warned checks
+- **priority** — configurable P1–P5
+- **tags** — user-defined tags
+- **details** — structured metadata (pipeline name, counts of failed/warned checks)
+- **responders** — optional OpsGenie team/user responders
 
 ## Notes
 
-- Requires the `requests` library (`pip install requests`).
-- The `api_key` should be an **API Integration** key created in OpsGenie, not an account API key.
-- Alert priority follows the OpsGenie convention: `P1` (critical) through `P5` (informational).
+- Alerts are only sent on failure by default. Set `alert_on_recovery=True` to also notify when the pipeline returns to a healthy state.
+- `raise_for_status()` is called on the response, so HTTP errors will propagate as exceptions.
