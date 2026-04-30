@@ -10,20 +10,21 @@ from pipewarden.alerting.base import AlertContext, BaseAlerter
 
 @dataclass
 class OpsGenieAlerter(BaseAlerter):
-    """Send alerts to OpsGenie via the Alert API."""
+    """Send alerts to OpsGenie via the Alerts API."""
 
     api_key: str = ""
-    region: str = "us"  # "us" or "eu"
+    region: str = "us"  # 'us' or 'eu'
+    priority: str = "P3"
     tags: list[str] = field(default_factory=list)
-    priority: str = "P3"  # P1–P5
     responders: list[dict] = field(default_factory=list)
     session: Optional[requests.Session] = field(default=None, repr=False)
+    alert_on_recovery: bool = True
 
     def __post_init__(self) -> None:
         if not self.api_key:
             raise ValueError("OpsGenieAlerter requires 'api_key'")
-        if self.priority not in {"P1", "P2", "P3", "P4", "P5"}:
-            raise ValueError("priority must be one of P1, P2, P3, P4, P5")
+        if self.region not in ("us", "eu"):
+            raise ValueError("region must be 'us' or 'eu'")
 
     def _session_or_default(self) -> requests.Session:
         if self.session is not None:
@@ -38,37 +39,44 @@ class OpsGenieAlerter(BaseAlerter):
         return s
 
     def _base_url(self) -> str:
-        host = "api.eu.opsgenie.com" if self.region == "eu" else "api.opsgenie.com"
-        return f"https://{host}/v2/alerts"
+        if self.region == "eu":
+            return "https://api.eu.opsgenie.com/v2/alerts"
+        return "https://api.opsgenie.com/v2/alerts"
 
     def _build_payload(self, ctx: AlertContext) -> dict:
         status_label = "HEALTHY" if ctx.is_healthy() else "UNHEALTHY"
         failed_names = [r.check_name for r in ctx.failed]
         warned_names = [r.check_name for r in ctx.warned]
 
-        description_lines = [f"Pipeline: {ctx.pipeline_name}", f"Status: {status_label}"]
+        lines = [f"Pipeline '{ctx.pipeline_name}' is {status_label}."]
         if failed_names:
-            description_lines.append(f"Failed checks: {', '.join(failed_names)}")
+            lines.append(f"Failed checks: {', '.join(failed_names)}")
         if warned_names:
-            description_lines.append(f"Warned checks: {', '.join(warned_names)}")
+            lines.append(f"Warned checks: {', '.join(warned_names)}")
 
         payload: dict = {
-            "message": f"[pipewarden] {ctx.pipeline_name} — {status_label}",
-            "description": "\n".join(description_lines),
+            "message": f"[PipeWarden] {ctx.pipeline_name} — {status_label}",
+            "description": "\n".join(lines),
             "priority": self.priority,
-            "tags": self.tags or ["pipewarden"],
+            "source": "pipewarden",
             "details": {
                 "pipeline": ctx.pipeline_name,
-                "failed_checks": str(len(ctx.failed)),
-                "warned_checks": str(len(ctx.warned)),
+                "total_checks": str(ctx.total),
+                "failed": str(len(ctx.failed)),
+                "warned": str(len(ctx.warned)),
             },
         }
+        if self.tags:
+            payload["tags"] = self.tags
         if self.responders:
             payload["responders"] = self.responders
         return payload
 
     def send(self, ctx: AlertContext) -> None:
-        session = self._session_or_default()
+        if ctx.is_healthy() and not self.alert_on_recovery:
+            return
+
         payload = self._build_payload(ctx)
-        response = session.post(self._base_url(), json=payload)
+        session = self._session_or_default()
+        response = session.post(self._base_url(), json=payload, timeout=10)
         response.raise_for_status()
